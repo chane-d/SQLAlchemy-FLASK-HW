@@ -1,25 +1,23 @@
-from flask import Flask
-from flask import jsonify
-
-# Python SQL toolkit and Object Relational Mapper
+from flask import Flask, jsonify
+import numpy as np
+import pandas as pd
+import datetime as dt
 import sqlalchemy
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine, func, inspect
-
-
+from sqlalchemy import create_engine, func
 engine = create_engine("sqlite:///Resources/hawaii.sqlite")
-session = Session(bind=engine)
-
-
 # reflect an existing database into a new model
 Base = automap_base()
 # reflect the tables
 Base.prepare(engine, reflect=True)
 
-# Save references to each table
+Base.classes.keys()
+
 Measurement = Base.classes.measurement
 Station = Base.classes.station
+
+
 
 app = Flask(__name__)
 
@@ -32,8 +30,69 @@ def welcome():
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
         f"to search by start date : /api/v1.0/yyyy-mm-dd<br/>"
-        f"to search by date range, with start date first and end date second: /api/v1.0/yyyy-mm-dd/yyyy-mm-dd<br/>"
+        f"in order to search by date range, use start date first and end date second: /api/v1.0/yyyy-mm-dd/yyyy-mm-dd<br/>"
     )
 
 
+
+@app.route("/api/v1.0/precipitation")
+def precipitation():
+    session = Session(engine)
+    measurements = session.query(Measurement).all()
+    
+    all_prec = []
+    for measurement in measurements:
+        prcp_dict = {}
+        prcp_dict["date"] = measurement.date
+        prcp_dict["age"] = measurement.prcp
+        all_prec.append(prcp_dict)
+
+    return jsonify(all_prec)
+
+@app.route("/api/v1.0/stations")
+def stations():
+    session = Session(engine)
+    stations = session.query(Measurement.station).group_by(Measurement.station).all()
+
+    all_stations = []
+    for station in stations:
+        station_dict = {}
+        station_dict["Station"] = station
+        all_stations.append(station_dict)
+
+    return jsonify(all_stations)
+
+@app.route("/api/v1.0/tobs")
+def tobs():
+    session = Session(engine)
+    lastdate=dt.datetime.strptime(session.query(Measurement.date).order_by(Measurement.date.desc()).first()[0],'%Y-%m-%d')
+    query_date=lastdate-dt.timedelta(days=365)
+
+    temps=session.query(Measurement.date,Measurement.tobs).filter(Measurement.date > query_date).all()
+
+    all_temps = []
+    for temp in temps:
+        temp_dict = {}
+        temp_dict["Date"] = temp.date
+        temp_dict["Temp"] = temp.tobs
+        all_temps.append(temp_dict)
+
+    return jsonify(all_temps)
+
+@app.route("/api/v1.0/<start>")
+def startdate(start):
+        session = Session(engine)
+        search=session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).\
+            filter(Measurement.date >= start).all()
+        return jsonify(search)
+
+@app.route("/api/v1.0/<start>/<end>")
+def enddate(start,end):
+        session = Session(engine)
+        search=session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).\
+            filter(Measurement.date >= start).filter(Measurement.date <= end).all()
+        return jsonify(search)
+
+if __name__ == '__main__':
+    app.run(debug=True)
 
